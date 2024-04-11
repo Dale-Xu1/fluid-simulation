@@ -1,7 +1,6 @@
 struct VertexInput
 {
-    @location(0) position: vec2f,
-    @location(1) uv: vec2f
+    @location(0) position: vec2f
 };
 
 struct FragmentInput
@@ -18,7 +17,7 @@ fn vs(input: VertexInput) -> FragmentInput
 {
     var output: FragmentInput;
     output.position = vec4f(input.position, 0, 1);
-    output.uv = input.uv;
+    output.uv = 0.5 * input.position + 0.5;
 
     return output;
 }

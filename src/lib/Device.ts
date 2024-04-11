@@ -31,6 +31,7 @@ export default class Device
 
     public static async init(canvas: HTMLCanvasElement): Promise<Device>
     {
+        // Request device and context
         let adapter = await window.navigator.gpu.requestAdapter()
         if (adapter === null) throw new Error("No GPU adapter found")
 
@@ -39,6 +40,7 @@ export default class Device
         let context = canvas.getContext("webgpu")
         if (context === null) throw new Error("No WebGPU context found")
 
+        // Configure texture format for canvas context
         let format = window.navigator.gpu.getPreferredCanvasFormat()
         context.configure({ device, format })
 
@@ -48,6 +50,7 @@ export default class Device
     private target!: Texture
     public get texture(): Texture
     {
+        // Maintain texture reference (create new object if canvas texture changes)
         let current = this.context.getCurrentTexture()
         if (!this.target || current !== this.target.texture) this.target = new Texture(this, current)
 
@@ -66,11 +69,11 @@ export default class Device
 
     public beginPass(texture: Texture,
     {
-        load = LoadOperation.CLEAR,
-        color = Color4.WHITE,
+        load = LoadOperation.CLEAR, color = Color4.WHITE,
         depth, depthLoad = load
     }: RenderEncoderParams = {})
     {
+        // Begin render pass
         this.renderEncoder = this.encoder.beginRenderPass(
         {
             colorAttachments:
@@ -89,12 +92,13 @@ export default class Device
     public endPass() { this.renderEncoder.end() }
     public submit()
     {
+        // Submit encoded instructions to GPU and reset encoder
         this.device.queue.submit([this.encoder.finish()])
         this.encoder = this.device.createCommandEncoder()
     }
 
-    public copyBuffer(source: Buffer, destination: Buffer,
-        sourceOffset: number = 0, destinationOffset: number = 0, length?: number)
+    public copyBuffer(source: Buffer, destination: Buffer, sourceOffset: number = 0, destinationOffset: number = 0,
+        length?: number)
     {
         length ??= source.length
         this.encoder.copyBufferToBuffer(source.buffer, sourceOffset, destination.buffer, destinationOffset,
@@ -117,23 +121,33 @@ interface Pipeline<T extends GPUPipelineBase>
 
 }
 
+export interface ResourceBindingParams
+{
+
+    i: number
+    resource: Resource
+
+}
+
 abstract class PassDescriptor<T extends Pipeline<GPUPipelineBase>>
 {
 
     public readonly groups: GPUBindGroup[]
 
-    protected constructor(public readonly pipeline: T, bindings: Resource[][])
+    protected constructor(public readonly pipeline: T, bindings: ResourceBindingParams[][])
     {
+        // Convert resource array to BindGroups
         let { device: { device } } = pipeline
         this.groups = bindings.map((group, i) => device.createBindGroup(
         {
             layout: pipeline.pipeline.getBindGroupLayout(i),
-            entries: group.map((resource, i) => ({ binding: i, resource: resource.getBinding() }))
+            entries: group.map(({ i, resource }) => ({ binding: i, resource: resource.getBinding() }))
         }))
     }
 
     protected bind(encoder: GPUBindingCommandsMixin)
     {
+        // Encode instructions to bind specified resources
         for (let i = 0; i < this.groups.length; i++)
         {
             let group = this.groups[i]
@@ -190,6 +204,7 @@ export class RenderPipeline implements Pipeline<GPURenderPipeline>
         depth, samples, blend = false
     }: RenderPipelineParams = {})
     {
+        // Convert format parameters to layout necessary for initialization
         let entries: GPUVertexBufferLayout[] = vertices.map(({ format, step = StepMode.VERTEX }, i) =>
         ({
             arrayStride: RenderPipeline.getBytes(format),
@@ -217,7 +232,7 @@ export class RenderPipeline implements Pipeline<GPURenderPipeline>
                 targets:
                 [{
                     format,
-                    blend: blend ?
+                    blend: blend ? // Configure alpha blend if specified
                     {
                         color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" },
                         alpha: {}
@@ -229,7 +244,7 @@ export class RenderPipeline implements Pipeline<GPURenderPipeline>
                 topology: primitive,
                 cullMode: cull
             },
-            depthStencil: depth ?
+            depthStencil: depth ? // Configure depth and stencil buffer if specified
             {
                 format: depth,
                 depthWriteEnabled: true,
@@ -246,8 +261,8 @@ export class RenderPass extends PassDescriptor<RenderPipeline>
 
     public readonly index: Buffer | null
 
-    public constructor(pipeline: RenderPipeline, bindings: Resource[][], public readonly vertices: Buffer[],
-        index?: Buffer)
+    public constructor(pipeline: RenderPipeline, bindings: ResourceBindingParams[][],
+        public readonly vertices: Buffer[], index?: Buffer)
     {
         super(pipeline, bindings)
         this.index = index ?? null
@@ -260,12 +275,14 @@ export class RenderPass extends PassDescriptor<RenderPipeline>
         encoder.setPipeline(this.pipeline.pipeline)
         this.bind(encoder)
 
+        // Bind vertex buffers
         for (let i = 0; i < this.vertices.length; i++)
         {
             let buffer = this.vertices[i].buffer
             encoder.setVertexBuffer(i, buffer)
         }
 
+        // If pass uses an index buffer, bind index buffer
         if (this.index !== null)
         {
             encoder.setIndexBuffer(this.index.buffer, "uint32")
@@ -295,7 +312,7 @@ export class ComputePipeline implements Pipeline<GPUComputePipeline>
 export class ComputePass extends PassDescriptor<ComputePipeline>
 {
 
-    public constructor(pipeline: ComputePipeline, bindings: Resource[][]) { super(pipeline, bindings) }
+    public constructor(pipeline: ComputePipeline, bindings: ResourceBindingParams[][]) { super(pipeline, bindings) }
 
     public dispatch(x: number, y: number = 1, z: number = 1)
     {
@@ -304,6 +321,7 @@ export class ComputePass extends PassDescriptor<ComputePipeline>
         encoder.setPipeline(this.pipeline.pipeline)
         this.bind(encoder)
 
+        // Dispatch threads
         encoder.dispatchWorkgroups(x, y, z)
         encoder.end()
     }

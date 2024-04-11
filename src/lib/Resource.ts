@@ -35,6 +35,7 @@ export class Buffer implements Resource
 
     public write(data: Data[], offset: number = 0)
     {
+        // Flatten data to pure list of numbers
         let flat = data.map(v =>
         {
             if (v instanceof Vector2) return [v.x, v.y]
@@ -51,6 +52,7 @@ export class Buffer implements Resource
             return v
         }).flat()
 
+        // Convert array to ArrayBuffer based on format
         let Array: Int32ArrayConstructor | Uint32ArrayConstructor | Float32ArrayConstructor
         switch (this.format)
         {
@@ -111,16 +113,16 @@ export class Texture implements Resource
     {
         let image = await Texture.toImage(src)
 
-        // Create intermediate canvas and draw image onto it
+        // Create intermediate canvas and draw image to convert to image data
         let canvas = document.createElement("canvas")
         let c = canvas.getContext("2d")!
 
         canvas.width = image.width
         canvas.height = image.height
-
         c.drawImage(image, 0, 0)
-        let data = c.getImageData(0, 0, image.width, image.height)
 
+        // Create texture and write image data
+        let data = c.getImageData(0, 0, image.width, image.height)
         let texture = new Texture(device, TextureFormat.RGBA_UNORM,
             GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST, [image.width, image.height], params)
 
@@ -200,6 +202,7 @@ export class Texture implements Resource
         }
         else
         {
+            // Create texture wrapper from existing GPUTexture
             this.texture = texture
             this.size = [texture.width, texture.height, texture.depthOrArrayLayers]
         }
@@ -209,8 +212,8 @@ export class Texture implements Resource
     public write(data: TextureData, mip?: number)
     {
         let width = this.size[0] * Texture.getBytes(this.format)
-        this.device.queue.writeTexture({ texture: this.texture, mipLevel: mip }, data,
-            { bytesPerRow: width }, this.size)
+        this.device.queue.writeTexture({ texture: this.texture, mipLevel: mip }, data, { bytesPerRow: width },
+            this.size)
     }
 
     public getBinding(): GPUBindingResource { return this.view }

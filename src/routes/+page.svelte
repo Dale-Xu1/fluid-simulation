@@ -1,14 +1,12 @@
 <script lang="ts">
 import { onMount } from "svelte"
 
-import Device, { ComputePass, ComputePipeline, LoadOperation, RenderPass, RenderPipeline, VertexFormat }
-    from "../lib/Device"
+import Device, { ComputePass, ComputePipeline, LoadOperation, RenderPass, RenderPipeline, VertexFormat } from "../lib/Device"
 import { Color4, Vector2 } from "../lib/Math"
 import { Buffer, BufferFormat, Sampler, Shader, Texture, TextureFormat } from "../lib/Resource"
 
-import shaderCode from "../lib/shaders/shader.wgsl?raw"
-import computeCode from "../lib/shaders/compute.wgsl?raw"
-import code from "../lib/shaders/test.wgsl?raw"
+import textureCode from "../lib/shaders/texture.wgsl?raw"
+import fluidSimulationCode from "../lib/shaders/fluid-simulation.wgsl?raw"
 
 let canvas: HTMLCanvasElement
 onMount(async () =>
@@ -22,96 +20,56 @@ onMount(async () =>
 
     const HEIGHT = 200;
     const WIDTH = Math.floor(HEIGHT * canvas.width / canvas.height);
-    let texture = new Texture(device, TextureFormat.RGBA_UNORM,
-        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST, [WIDTH, HEIGHT])
 
-    let data = []
-    for (let i = 0; i < WIDTH * HEIGHT * 4; i++) data[i] = (i + 1) % 4 === 0 ? 255 : Math.floor(Math.random() * 256)
-    texture.write(new Uint8Array(data))
+    let texture = new Texture(device, TextureFormat.RGBA_UNORM, GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST, [WIDTH, HEIGHT])
+    let dimensionsBuffer = new Buffer(device, BufferFormat.U32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 2)
+    dimensionsBuffer.write([WIDTH, HEIGHT])
 
     let vertexBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 2 * 6)
     vertexBuffer.write(
     [
-        new Vector2(-1, -1), new Vector2( 1, -1), new Vector2( 1,  1),
-        new Vector2(-1, -1), new Vector2( 1,  1), new Vector2(-1,  1)
+        new Vector2(-1, -1), new Vector2(1, -1), new Vector2( 1, 1),
+        new Vector2(-1, -1), new Vector2(1,  1), new Vector2(-1, 1)
     ])
 
-    let uvBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 2 * 6)
-    uvBuffer.write(
-    [
-        new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1),
-        new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 1)
-    ])
-
-    let shader = new Shader(device, code)
-    let pipeline = new RenderPipeline(device, shader, device.format,
-        [{ format: VertexFormat.F32_2 }, { format: VertexFormat.F32_2 }])
-    let pass = new RenderPass(pipeline, [[new Sampler(device), texture]], [vertexBuffer, uvBuffer])
-
-    device.beginPass(device.texture, { load: LoadOperation.CLEAR, color: Color4.BLACK })
-    pass.render(6)
-    device.endPass()
-
-    device.submit()
+    let pipeline = new RenderPipeline(device, new Shader(device, textureCode), device.format, [{ format: VertexFormat.F32_2 }])
+    let pass = new RenderPass(pipeline, [[{ i: 0, resource: new Sampler(device) }, { i: 1, resource: texture }]], [vertexBuffer])
 
 
-    // let device = await Device.init(canvas)
+    let velocityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, WIDTH * HEIGHT * 2)
+    let previousVelocityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, WIDTH * HEIGHT * 2)
 
-    // let vertexBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 2 * 6)
-    // vertexBuffer.write(
-    // [
-    //     new Vector2(-1, -1),
-    //     new Vector2( 1, -1),
-    //     new Vector2( 1,  1),
-    //     new Vector2(-1, -1),
-    //     new Vector2( 1,  1),
-    //     new Vector2(-1,  1)
-    // ])
+    let divergenceBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, WIDTH * HEIGHT)
+    let pressureBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, WIDTH * HEIGHT)
+    let previousPressureBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, WIDTH * HEIGHT)
 
-    // const HEIGHT = 800;
-    // const WIDTH = Math.floor(HEIGHT * canvas.width / canvas.height);
+    let densityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, WIDTH * HEIGHT * 4)
+    let previousDensityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, WIDTH * HEIGHT * 4)
 
-    // let uniformBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 2)
-    // uniformBuffer.write([WIDTH, HEIGHT])
+    let data = []
+    for (let i = 0; i < WIDTH * HEIGHT; i++) data[i] = new Color4(Math.random(), Math.random(), Math.random(), 1)
+    densityBuffer.write(data)
 
-    // let stateBuffers =
-    // [
-    //     new Buffer(device, BufferFormat.U32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, WIDTH * HEIGHT),
-    //     new Buffer(device, BufferFormat.U32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, WIDTH * HEIGHT)
-    // ]
+    let advectionPass = new ComputePass(new ComputePipeline(device, new Shader(device, fluidSimulationCode), "advection"),
+        [[{ i: 1, resource: dimensionsBuffer }, { i: 2, resource: velocityBuffer }, { i: 3, resource: previousVelocityBuffer }]])
+    let transferPass = new ComputePass(new ComputePipeline(device, new Shader(device, fluidSimulationCode), "transfer"),
+        [[{ i: 0, resource: texture }, { i: 1, resource: dimensionsBuffer }, { i: 7, resource: densityBuffer }]])
 
-    // let data = []
-    // for (let i = 0; i < WIDTH * HEIGHT; i++) data[i] = Math.random() < 0.5 ? 0 : 1
-    // stateBuffers[0].write(data)
+    loop()
+    function loop()
+    {
+        let w = Math.ceil(WIDTH / 8), h = Math.ceil(HEIGHT / 8)
 
-    // let shader = new Shader(device, shaderCode)
-    // let compute = new Shader(device, computeCode)
+        advectionPass.dispatch(w, h)
+        transferPass.dispatch(w, h)
 
-    // let renderPipeline = new RenderPipeline(device, shader, device.format, [{ format: VertexFormat.F32_2 }])
-    // let renderPass1 = new RenderPass(renderPipeline, [[uniformBuffer, stateBuffers[1]]], [vertexBuffer])
-    // let renderPass2 = new RenderPass(renderPipeline, [[uniformBuffer, stateBuffers[0]]], [vertexBuffer])
+        device.beginPass(device.texture, { load: LoadOperation.CLEAR, color: Color4.BLACK })
+        pass.render(6)
+        device.endPass()
 
-    // let computePipeline = new ComputePipeline(device, compute)
-    // let computePass1 = new ComputePass(computePipeline, [[uniformBuffer, stateBuffers[0], stateBuffers[1]]])
-    // let computePass2 = new ComputePass(computePipeline, [[uniformBuffer, stateBuffers[1], stateBuffers[0]]])
-
-    // let i = 0
-    // function loop()
-    // {
-    //     let renderPass = i % 2 === 0 ? renderPass1 : renderPass2
-    //     let computePass = i % 2 === 0 ? computePass1 : computePass2
-    //     i++
-
-    //     computePass.dispatch(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8))
-
-    //     device.beginPass(device.texture, { load: LoadOperation.CLEAR, color: Color4.BLACK })
-    //     renderPass.render(6, WIDTH * HEIGHT)
-    //     device.endPass()
-
-    //     device.submit()
-    //     requestAnimationFrame(loop)
-    // }
-    // loop()
+        device.submit()
+        requestAnimationFrame(loop)
+    }
 })
 
 </script>
