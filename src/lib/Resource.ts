@@ -1,4 +1,4 @@
-import { Vector2, Color4, Matrix2, Matrix4, Vector3 } from "./Math"
+import { Vector2, Vector3, Color3, Color4, Matrix2, Matrix4 } from "./Math"
 import type Device from "./Device"
 
 export default interface Resource
@@ -12,7 +12,7 @@ export default interface Resource
 export const enum BufferFormat { I32, U32, F32 }
 export type BufferData = Int32Array | Uint32Array | Float32Array
 
-type Data = number | Vector2 | Vector3 | Color4 | Matrix2 | Matrix4
+type Data = number | Vector2 | Vector3 | Color3 | Color4 | Matrix2 | Matrix4
 const ELEMENT_SIZE = 4
 
 export class Buffer implements Resource
@@ -40,6 +40,7 @@ export class Buffer implements Resource
         {
             if (v instanceof Vector2) return [v.x, v.y]
             if (v instanceof Vector3) return [v.x, v.y, v.z]
+            if (v instanceof Color3 ) return [v.r, v.g, v.b]
             if (v instanceof Color4 ) return [v.r, v.g, v.b, v.a]
             if (v instanceof Matrix2) return [v.m00, v.m10, v.m01, v.m11]
             if (v instanceof Matrix4) return [

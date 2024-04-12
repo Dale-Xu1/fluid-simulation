@@ -90,7 +90,30 @@ export class Vector3
 
 }
 
-export class Color4
+export class Color3
+{
+
+    public static readonly BLACK: Color3 = new Color3(0, 0, 0)
+    public static readonly WHITE: Color3 = new Color3(1, 1, 1)
+
+    public static readonly RED:   Color3 = new Color3(1, 0, 0)
+    public static readonly GREEN: Color3 = new Color3(0, 1, 0)
+    public static readonly BLUE:  Color3 = new Color3(0, 0, 1)
+
+    public static lerp(a: Color4, b: Color4, t: number): Color4 { return a.mul(1 - t).add(b.mul(t)) }
+
+    public constructor(public readonly r: number, public readonly g: number, public readonly b: number) { }
+
+
+    public add(c: Color3): Color3 { return new Color3(this.r + c.r, this.g + c.g, this.b + c.b) }
+    public sub(c: Color3): Color3 { return new Color3(this.r - c.r, this.g - c.g, this.b - c.b) }
+
+    public mul(v: number): Color3 { return new Color3(this.r * v, this.g * v, this.b * v) }
+    public div(v: number): Color3 { return new Color3(this.r / v, this.g / v, this.b / v) }
+
+}
+
+export class Color4 extends Color3
 {
 
     public static readonly BLACK: Color4 = new Color4(0, 0, 0, 1)
@@ -102,15 +125,14 @@ export class Color4
 
     public static lerp(a: Color4, b: Color4, t: number): Color4 { return a.mul(1 - t).add(b.mul(t)) }
 
-    public constructor(public readonly r: number, public readonly g: number, public readonly b: number,
-        public readonly a: number) { }
+    public constructor(r: number, g: number, b: number, public readonly a: number) { super(r, g, b) }
 
 
-    public add(c: Color4): Color4 { return new Color4(this.r + c.r, this.g + c.g, this.b + c.b, this.a + c.a) }
-    public sub(c: Color4): Color4 { return new Color4(this.r - c.r, this.g - c.g, this.b - c.b, this.a - c.a) }
+    public override add(c: Color4): Color4 { return new Color4(this.r + c.r, this.g + c.g, this.b + c.b, this.a + c.a) }
+    public override sub(c: Color4): Color4 { return new Color4(this.r - c.r, this.g - c.g, this.b - c.b, this.a - c.a) }
 
-    public mul(v: number): Color4 { return new Color4(this.r * v, this.g * v, this.b * v, this.a * v) }
-    public div(v: number): Color4 { return new Color4(this.r / v, this.g / v, this.b / v, this.a / v) }
+    public override mul(v: number): Color4 { return new Color4(this.r * v, this.g * v, this.b * v, this.a * v) }
+    public override div(v: number): Color4 { return new Color4(this.r / v, this.g / v, this.b / v, this.a / v) }
 
 }
 

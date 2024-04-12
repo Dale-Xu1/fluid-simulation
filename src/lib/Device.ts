@@ -132,13 +132,13 @@ export interface ResourceBindingParams
 abstract class PassDescriptor<T extends Pipeline<GPUPipelineBase>>
 {
 
-    public readonly groups: GPUBindGroup[]
+    public readonly groups: (GPUBindGroup | null)[]
 
     protected constructor(public readonly pipeline: T, bindings: ResourceBindingParams[][])
     {
         // Convert resource array to BindGroups
         let { device: { device } } = pipeline
-        this.groups = bindings.map((group, i) => device.createBindGroup(
+        this.groups = bindings.map((group, i) => group.length === 0 ? null : device.createBindGroup(
         {
             layout: pipeline.pipeline.getBindGroupLayout(i),
             entries: group.map(({ i, resource }) => ({ binding: i, resource: resource.getBinding() }))
@@ -151,7 +151,7 @@ abstract class PassDescriptor<T extends Pipeline<GPUPipelineBase>>
         for (let i = 0; i < this.groups.length; i++)
         {
             let group = this.groups[i]
-            encoder.setBindGroup(i, group)
+            if (group !== null) encoder.setBindGroup(i, group)
         }
     }
 
