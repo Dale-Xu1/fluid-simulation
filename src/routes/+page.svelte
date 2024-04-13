@@ -13,9 +13,9 @@ let canvas: HTMLCanvasElement
 onMount(() =>
 {
     let ratio = window.devicePixelRatio
-
     canvas.width = window.innerWidth * ratio
     canvas.height = window.innerHeight * ratio
+
     main()
 })
 
@@ -65,35 +65,47 @@ async function main()
     let shader = new Shader(device, fluidSimulationCode)
 
     let advectionPass = new ComputePass(new ComputePipeline(device, shader, "advection"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 0, resource: velocityBuffer }, { i: 1, resource: previousVelocityBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 0, resource: velocityBuffer }, { i: 1, resource: previousVelocityBuffer }]])
 
     let calculateDivergencePass = new ComputePass(new ComputePipeline(device, shader, "calculateDivergence"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 0, resource: velocityBuffer }, { i: 2, resource: divergenceBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 0, resource: velocityBuffer }, { i: 2, resource: divergenceBuffer }]])
     let calculateCurlPass = new ComputePass(new ComputePipeline(device, shader, "calculateCurl"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 0, resource: velocityBuffer }, { i: 3, resource: curlBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 0, resource: velocityBuffer }, { i: 3, resource: curlBuffer }]])
     let vorticityPass = new ComputePass(new ComputePipeline(device, shader, "vorticity"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 0, resource: velocityBuffer }, { i: 3, resource: curlBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 0, resource: velocityBuffer }, { i: 3, resource: curlBuffer }]])
 
     let jacobiPass = new ComputePass(new ComputePipeline(device, shader, "jacobi"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 2, resource: divergenceBuffer }, { i: 4, resource: pressureBuffer }, { i: 5, resource: previousPressureBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 2, resource: divergenceBuffer }, { i: 4, resource: pressureBuffer }, { i: 5, resource: previousPressureBuffer }]])
     let gradientSubtractionPass = new ComputePass(new ComputePipeline(device, shader, "gradientSubtraction"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 0, resource: velocityBuffer }, { i: 4, resource: pressureBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 0, resource: velocityBuffer }, { i: 4, resource: pressureBuffer }]])
 
     let densityAdvectionPass = new ComputePass(new ComputePipeline(device, shader, "densityAdvection"),
-        [[{ i: 1, resource: dimensionsBuffer }, { i: 2, resource: densityDimensionsBuffer }], [{ i: 1, resource: previousVelocityBuffer }, { i: 6, resource: densityBuffer }, { i: 7, resource: previousDensityBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }, { i: 2, resource: densityDimensionsBuffer }],
+         [{ i: 1, resource: previousVelocityBuffer }, { i: 6, resource: densityBuffer }, { i: 7, resource: previousDensityBuffer }]])
     let transferPass = new ComputePass(new ComputePipeline(device, shader, "transfer"),
-        [[{ i: 0, resource: texture }, { i: 2, resource: densityDimensionsBuffer }], [{ i: 6, resource: densityBuffer }]])
+        [[{ i: 0, resource: texture }, { i: 2, resource: densityDimensionsBuffer }],
+         [{ i: 6, resource: densityBuffer }]])
 
     // Initialize user interface uniforms
     let positionBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 2)
-    let impulseBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 2)
-    let colorBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 3)
-    let radiusBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 1)
+    let impulseBuffer  = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 2)
+    let colorBuffer    = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 3)
+    let radiusBuffer   = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 1)
 
     let addImpulsePass = new ComputePass(new ComputePipeline(device, shader, "addImpulse"),
-        [[{ i: 1, resource: dimensionsBuffer }], [{ i: 0, resource: velocityBuffer }], [{ i: 0, resource: positionBuffer }, { i: 1, resource: impulseBuffer }, { i: 3, resource: radiusBuffer }]])
+        [[{ i: 1, resource: dimensionsBuffer }],
+         [{ i: 0, resource: velocityBuffer }],
+         [{ i: 0, resource: positionBuffer }, { i: 1, resource: impulseBuffer }, { i: 3, resource: radiusBuffer }]])
     let addDensityPass = new ComputePass(new ComputePipeline(device, shader, "addDensity"),
-        [[{ i: 2, resource: densityDimensionsBuffer }], [{ i: 6, resource: densityBuffer }], [{ i: 0, resource: positionBuffer }, { i: 2, resource: colorBuffer }, { i: 3, resource: radiusBuffer }]])
+        [[{ i: 2, resource: densityDimensionsBuffer }],
+         [{ i: 6, resource: densityBuffer }],
+         [{ i: 0, resource: positionBuffer }, { i: 2, resource: colorBuffer }, { i: 3, resource: radiusBuffer }]])
 
 
     let x = Math.ceil(w / 8), y = Math.ceil(h / 8)
@@ -115,7 +127,7 @@ async function main()
             let impulse = localPosition.sub(localPrevious)
 
             positionBuffer.write([localPosition])
-            impulseBuffer.write([impulse])
+            impulseBuffer.write([impulse.mul(0.5)])
             radiusBuffer.write([RADIUS - 1])
             addImpulsePass.dispatch(r, r)
 

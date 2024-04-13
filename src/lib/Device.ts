@@ -60,8 +60,7 @@ export default class Device
     public encoder: GPUCommandEncoder
     public renderEncoder!: GPURenderPassEncoder
 
-    private constructor(public readonly device: GPUDevice, private readonly context: GPUCanvasContext,
-        public readonly format: TextureFormat)
+    private constructor(public readonly device: GPUDevice, private readonly context: GPUCanvasContext, public readonly format: TextureFormat)
     {
         this.encoder = this.device.createCommandEncoder()
     }
@@ -97,8 +96,7 @@ export default class Device
         this.encoder = this.device.createCommandEncoder()
     }
 
-    public copyBuffer(source: Buffer, destination: Buffer, sourceOffset: number = 0, destinationOffset: number = 0,
-        length?: number)
+    public copyBuffer(source: Buffer, destination: Buffer, sourceOffset: number = 0, destinationOffset: number = 0, length?: number)
     {
         length ??= source.length
         this.encoder.copyBufferToBuffer(source.buffer, sourceOffset, destination.buffer, destinationOffset,
@@ -261,8 +259,7 @@ export class RenderPass extends PassDescriptor<RenderPipeline>
 
     public readonly index: Buffer | null
 
-    public constructor(pipeline: RenderPipeline, bindings: ResourceBindingParams[][],
-        public readonly vertices: Buffer[], index?: Buffer)
+    public constructor(pipeline: RenderPipeline, bindings: ResourceBindingParams[][], public readonly vertices: Buffer[], index?: Buffer)
     {
         super(pipeline, bindings)
         this.index = index ?? null
