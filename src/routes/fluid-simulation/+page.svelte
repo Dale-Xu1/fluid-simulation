@@ -1,13 +1,13 @@
 <script lang="ts">
 import { onMount } from "svelte"
 
-import Device, { ComputePass, ComputePipeline, LoadOperation, RenderPass, RenderPipeline, VertexFormat } from "../lib/Device"
-import { Color3, Color4, Vector2 } from "../lib/Math"
-import { Buffer, BufferFormat, Sampler, SamplerFilterMode, Shader, Texture, TextureFormat } from "../lib/Resource"
-import Input, { Key, MouseButton } from "../lib/Input"
+import Device, { ComputePass, ComputePipeline, LoadOperation, RenderPass, RenderPipeline, VertexFormat } from "../../lib/Device"
+import { Color3, Color4, Vector2 } from "../../lib/Math"
+import { Buffer, BufferFormat, Sampler, SamplerFilterMode, Shader, Texture, TextureFormat } from "../../lib/Resource"
+import Input, { Key, MouseButton } from "../../lib/Input"
 
-import textureCode from "../lib/shaders/texture.wgsl?raw"
-import watercolorSimulationCode from "../lib/shaders/watercolor-simulation.wgsl?raw"
+import textureCode from "../../lib/shaders/texture.wgsl?raw"
+import fluidSimulationCode from "../../lib/shaders/fluid-simulation.wgsl?raw"
 
 let canvas: HTMLCanvasElement
 onMount(() =>
@@ -89,7 +89,7 @@ async function main()
     }
 
     // Initialize shader passes
-    let shader = new Shader(device, watercolorSimulationCode)
+    let shader = new Shader(device, fluidSimulationCode)
 
     let advectionPass = new ComputePass(new ComputePipeline(device, shader, "advection"),
         [[bufferConfig.dimensions], [bufferConfig.velocity, bufferConfig.previousVelocity]])

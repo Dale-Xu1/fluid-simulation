@@ -134,6 +134,13 @@ fn gradientSubtraction(@builtin(global_invocation_id) id: vec3u)
 {
     if (id.x >= dimensions.x || id.y >= dimensions.y) { return; }
 
+    // TODO: Wet mask
+    if (id.x < 10 || id.x >= dimensions.x - 10 || id.y < 10 || id.y >= dimensions.y - 10)
+    {
+        velocity[uindex(id.xy)] = vec2f(0);
+        return;
+    }
+
     let position = vec2i(id.xy);
     let u = indexf32(&pressure, position + vec2i(0, 1));
     let d = indexf32(&pressure, position - vec2i(0, 1));
