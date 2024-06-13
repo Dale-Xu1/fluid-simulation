@@ -7,7 +7,7 @@ import { Buffer, BufferFormat, Sampler, SamplerFilterMode, Shader, Texture, Text
 import Input, { Key, MouseButton } from "../lib/Input"
 
 import textureCode from "../lib/shaders/texture.wgsl?raw"
-import watercolorSimulationCode from "../lib/shaders/watercolor-simulation.wgsl?raw"
+import fluidSimulationCode from "../lib/shaders/fluid-simulation.wgsl?raw"
 
 let canvas: HTMLCanvasElement
 onMount(() =>
@@ -89,7 +89,7 @@ async function main()
     }
 
     // Initialize shader passes
-    let shader = new Shader(device, watercolorSimulationCode)
+    let shader = new Shader(device, fluidSimulationCode)
 
     let advectionPass = new ComputePass(new ComputePipeline(device, shader, "advection"),
         [[bufferConfig.dimensions], [bufferConfig.velocity, bufferConfig.previousVelocity]])

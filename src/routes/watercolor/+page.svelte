@@ -7,7 +7,7 @@ import { Buffer, BufferFormat, Sampler, SamplerFilterMode, Shader, Texture, Text
 import Input, { Key, MouseButton } from "../../lib/Input"
 
 import textureCode from "../../lib/shaders/texture.wgsl?raw"
-import fluidSimulationCode from "../../lib/shaders/fluid-simulation.wgsl?raw"
+import watercolorSimulationCode from "../../lib/shaders/watercolor-simulation.wgsl?raw"
 
 let canvas: HTMLCanvasElement
 onMount(() =>
@@ -23,12 +23,12 @@ async function main()
 {
     let device = await Device.init(canvas)
 
-    const SCALE = 3
+    const SCALE = 1
     const ITERATIONS = 32
 
-    const RADIUS = 10
+    const RADIUS = 16
 
-    let width = window.innerWidth, height = window.innerHeight
+    let width = Math.floor(window.innerWidth / 3), height = Math.floor(window.innerHeight / 3)
     let w = Math.floor(width / SCALE), h = Math.floor(height / SCALE)
 
     // Initialize rendering texture related data
@@ -46,9 +46,11 @@ async function main()
     ])
 
     let pipeline = new RenderPipeline(device, new Shader(device, textureCode), device.format, [{ format: VertexFormat.F32_2 }])
-    let pass = new RenderPass(pipeline, [[{ i: 0, resource: new Sampler(device, { mag: SamplerFilterMode.LINEAR }) }, { i: 1, resource: texture }]], [vertexBuffer])
+    let pass = new RenderPass(pipeline, [[{ i: 0, resource: new Sampler(device) }, { i: 1, resource: texture }]], [vertexBuffer])
 
     // Initialize fluid simulation buffers
+    let wetMaskBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE, w * h)
+
     let velocityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, w * h * 2)
     let previousVelocityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, w * h * 2)
 
@@ -60,6 +62,7 @@ async function main()
 
     let densityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, width * height * 4)
     let previousDensityBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, width * height * 4)
+    let pigmentBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, width * height * 4)
 
     // Initialize user interface uniforms
     let positionBuffer = new Buffer(device, BufferFormat.F32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 2)
@@ -73,14 +76,16 @@ async function main()
         dimensions:        { i: 1, resource: dimensionsBuffer },
         densityDimensions: { i: 2, resource: densityDimensionsBuffer },
 
-        velocity:          { i: 0, resource: velocityBuffer },
-        previousVelocity:  { i: 1, resource: previousVelocityBuffer },
-        divergence:        { i: 2, resource: divergenceBuffer },
-        curl:              { i: 3, resource: curlBuffer },
-        pressure:          { i: 4, resource: pressureBuffer },
-        previousPressure:  { i: 5, resource: previousPressureBuffer },
-        density:           { i: 6, resource: densityBuffer },
-        previousDensity:   { i: 7, resource: previousDensityBuffer },
+        wetMask:           { i: 0, resource: wetMaskBuffer },
+        velocity:          { i: 1, resource: velocityBuffer },
+        previousVelocity:  { i: 2, resource: previousVelocityBuffer },
+        divergence:        { i: 3, resource: divergenceBuffer },
+        curl:              { i: 4, resource: curlBuffer },
+        pressure:          { i: 5, resource: pressureBuffer },
+        previousPressure:  { i: 6, resource: previousPressureBuffer },
+        density:           { i: 7, resource: densityBuffer },
+        previousDensity:   { i: 8, resource: previousDensityBuffer },
+        pigment:           { i: 9, resource: pigmentBuffer },
 
         position:          { i: 0, resource: positionBuffer },
         impulse:           { i: 1, resource: impulseBuffer },
@@ -89,7 +94,7 @@ async function main()
     }
 
     // Initialize shader passes
-    let shader = new Shader(device, fluidSimulationCode)
+    let shader = new Shader(device, watercolorSimulationCode)
 
     let advectionPass = new ComputePass(new ComputePipeline(device, shader, "advection"),
         [[bufferConfig.dimensions], [bufferConfig.velocity, bufferConfig.previousVelocity]])
@@ -105,14 +110,18 @@ async function main()
         [[bufferConfig.dimensions], [bufferConfig.divergence, bufferConfig.pressure, bufferConfig.previousPressure]])
     let gradientSubtractionPass = new ComputePass(new ComputePipeline(device, shader, "gradientSubtraction"),
         [[bufferConfig.dimensions], [bufferConfig.velocity, bufferConfig.pressure]])
+    let wetnessPass = new ComputePass(new ComputePipeline(device, shader, "wetness"),
+        [[bufferConfig.dimensions], [bufferConfig.wetMask, bufferConfig.velocity]])
 
     let densityAdvectionPass = new ComputePass(new ComputePipeline(device, shader, "densityAdvection"),
         [[bufferConfig.dimensions, bufferConfig.densityDimensions], [bufferConfig.velocity, bufferConfig.density, bufferConfig.previousDensity]])
+    let transferPigmentPass = new ComputePass(new ComputePipeline(device, shader, "transferPigment"),
+        [[bufferConfig.densityDimensions], [bufferConfig.density, bufferConfig.pigment]])
     let transferPass = new ComputePass(new ComputePipeline(device, shader, "transfer"),
-        [[bufferConfig.texture, bufferConfig.densityDimensions], [bufferConfig.density]])
+        [[bufferConfig.texture, bufferConfig.densityDimensions], [bufferConfig.density, bufferConfig.pigment]])
 
     let addImpulsePass = new ComputePass(new ComputePipeline(device, shader, "addImpulse"),
-        [[bufferConfig.dimensions], [bufferConfig.velocity], [bufferConfig.position, bufferConfig.impulse, bufferConfig.radius]])
+        [[bufferConfig.dimensions], [bufferConfig.wetMask, bufferConfig.velocity], [bufferConfig.position, bufferConfig.impulse, bufferConfig.radius]])
     let addDensityPass = new ComputePass(new ComputePipeline(device, shader, "addDensity"),
         [[bufferConfig.densityDimensions], [bufferConfig.density], [bufferConfig.position, bufferConfig.color, bufferConfig.radius]])
 
@@ -137,7 +146,7 @@ async function main()
             let impulse = localPosition.sub(localPrevious)
 
             positionBuffer.write([localPosition])
-            impulseBuffer.write([impulse.mul(0.2)])
+            impulseBuffer.write([impulse.mul(0.1)])
             radiusBuffer.write([RADIUS - 1])
             addImpulsePass.dispatch(r, r)
 
@@ -145,7 +154,7 @@ async function main()
             {
                 device.submit()
                 colorBuffer.write([color.mul(0.02 * impulse.length)])
-                radiusBuffer.write([SCALE * RADIUS])
+                radiusBuffer.write([SCALE * RADIUS - 1])
                 addDensityPass.dispatch(nr, nr)
             }
         }
@@ -165,8 +174,10 @@ async function main()
             jacobiPass.dispatch(x, y)
         }
         gradientSubtractionPass.dispatch(x, y)
+        wetnessPass.dispatch(x, y)
 
         densityAdvectionPass.dispatch(nx, ny)
+        transferPigmentPass.dispatch(nx, ny)
         transferPass.dispatch(nx, ny)
 
         device.beginPass(device.texture, { load: LoadOperation.CLEAR, color: Color4.BLACK })

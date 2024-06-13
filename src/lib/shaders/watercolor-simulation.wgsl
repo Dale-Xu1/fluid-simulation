@@ -1,26 +1,31 @@
 const DT: f32 = 1;
-const SCALE: f32 = 3;
+const SCALE: f32 = 1;
 
-const VELOCITY_DIFFUSION: f32 = 0.998;
-const DENSITY_DIFFUSION: f32 = 0.99;
+const VELOCITY_DIFFUSION: f32 = 0.99;
+const WET_MASK_DIFFUSION: f32 = 0.95;
+const DENSITY_DIFFUSION: f32 = 1;
 
-const CURL: f32 = 0.1;
+const CURL: f32 = 0.01;
+const STAINING: f32 = 5;
 
 @group(0) @binding(0) var texture: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> dimensions: vec2u;
 @group(0) @binding(2) var<uniform> densityDimensions: vec2u;
 
-@group(1) @binding(0) var<storage, read_write> velocity: array<vec2f>;
-@group(1) @binding(1) var<storage, read_write> previousVelocity: array<vec2f>;
+@group(1) @binding(0) var<storage, read_write> wetMask: array<f32>;
 
-@group(1) @binding(2) var<storage, read_write> divergence: array<f32>;
-@group(1) @binding(3) var<storage, read_write> curl: array<f32>;
+@group(1) @binding(1) var<storage, read_write> velocity: array<vec2f>;
+@group(1) @binding(2) var<storage, read_write> previousVelocity: array<vec2f>;
 
-@group(1) @binding(4) var<storage, read_write> pressure: array<f32>;
-@group(1) @binding(5) var<storage, read_write> previousPressure: array<f32>;
+@group(1) @binding(3) var<storage, read_write> divergence: array<f32>;
+@group(1) @binding(4) var<storage, read_write> curl: array<f32>;
 
-@group(1) @binding(6) var<storage, read_write> density: array<vec3f>;
-@group(1) @binding(7) var<storage, read_write> previousDensity: array<vec3f>;
+@group(1) @binding(5) var<storage, read_write> pressure: array<f32>;
+@group(1) @binding(6) var<storage, read_write> previousPressure: array<f32>;
+
+@group(1) @binding(7) var<storage, read_write> density: array<vec3f>;
+@group(1) @binding(8) var<storage, read_write> previousDensity: array<vec3f>;
+@group(1) @binding(9) var<storage, read_write> pigment: array<vec3f>;
 
 // Helper function to index buffer using two dimensional index
 fn uindex(id: vec2u) -> u32 { return id.y * dimensions.x + id.x; }
@@ -134,13 +139,6 @@ fn gradientSubtraction(@builtin(global_invocation_id) id: vec3u)
 {
     if (id.x >= dimensions.x || id.y >= dimensions.y) { return; }
 
-    // TODO: Wet mask
-    if (id.x < 10 || id.x >= dimensions.x - 10 || id.y < 10 || id.y >= dimensions.y - 10)
-    {
-        velocity[uindex(id.xy)] = vec2f(0);
-        return;
-    }
-
     let position = vec2i(id.xy);
     let u = indexf32(&pressure, position + vec2i(0, 1));
     let d = indexf32(&pressure, position - vec2i(0, 1));
@@ -148,6 +146,25 @@ fn gradientSubtraction(@builtin(global_invocation_id) id: vec3u)
     let l = indexf32(&pressure, position - vec2i(1, 0));
 
     velocity[uindex(id.xy)] -= 0.5 * vec2f(r - l, u - d) * DT;
+}
+
+@compute @workgroup_size(8, 8)
+fn wetness(@builtin(global_invocation_id) id: vec3u)
+{
+    if (id.x >= dimensions.x || id.y >= dimensions.y) { return; }
+
+    let i = uindex(id.xy);
+    // let position = vec2i(id.xy);
+
+    // let m = wetMask[i];
+    // let u = indexf32(&wetMask, position + vec2i(0, 1));
+    // let d = indexf32(&wetMask, position - vec2i(0, 1));
+    // let r = indexf32(&wetMask, position + vec2i(1, 0));
+    // let l = indexf32(&wetMask, position - vec2i(1, 0));
+
+    // wetMask[i] = WET_MASK_DIFFUSION * 0.2 * (m + u + d + r + l);
+    // wetMask[i] *= WET_MASK_DIFFUSION;
+    if (wetMask[i] < 0.1) { velocity[i] = vec2f(0); }
 }
 
 // Helper function to index buffer using two dimensional index
@@ -183,10 +200,25 @@ fn densityAdvection(@builtin(global_invocation_id) id: vec3u)
 }
 
 @compute @workgroup_size(8, 8)
+fn transferPigment(@builtin(global_invocation_id) id: vec3u)
+{
+    if (id.x >= densityDimensions.x || id.y >= densityDimensions.y) { return; }
+
+    let i = sindex(id.xy);
+    let down = density[i];
+    let up = pigment[i] / STAINING;
+
+    pigment[i] += down - up;
+    density[i] += up - down;
+}
+
+@compute @workgroup_size(8, 8)
 fn transfer(@builtin(global_invocation_id) id: vec3u)
 {
     // Transfer density data as colors to texture
-    let color = vec4f(density[sindex(id.xy)], 1);
+    let i = sindex(id.xy);
+    let color = vec4f(density[i] + pigment[i], 1);
+
     textureStore(texture, id.xy, color);
 }
 
@@ -206,7 +238,9 @@ fn addImpulse(@builtin(global_invocation_id) id: vec3u)
     let ij = vec2i(position + offset);
     if (ij.x < 0 || ij.x >= i32(dimensions.x) || ij.y < 0 || ij.y >= i32(dimensions.y)) { return; }
 
-    velocity[uindex(vec2u(ij))] += impulse;
+    let i = uindex(vec2u(ij));
+    wetMask[i] = 1;
+    velocity[i] += impulse;
 }
 
 @compute @workgroup_size(8, 8)
