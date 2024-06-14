@@ -13,5 +13,5 @@ npm install
 npm run dev
 ```
 
-![](https://github.com/Dale-Xu1/FluidSimulation/assets/69087617/ca232043-706a-4192-b4c2-7d460a6b8837)
-![](https://github.com/Dale-Xu1/FluidSimulation/assets/69087617/c38d0c74-76a3-4b9a-b54f-d571fd856949)
+![](https://github.com/Dale-Xu1/fluid-simulation/assets/69087617/86126a1c-15c8-489c-9bb8-a433cf4e5da5)
+![](https://github.com/Dale-Xu1/fluid-simulation/assets/69087617/830e7dd6-bf6e-4252-b9a4-d0fadfc748e9)
